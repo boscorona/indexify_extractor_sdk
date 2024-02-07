@@ -1,22 +1,19 @@
-import pdfminer
-from pdfminer.pdfpage import PDFPage
-from pdfminer.layout import LAParams
-from pdfminer.converter import TextConverter
-from pdfminer.pdfinterp import PDFResourceManager, PDFPageInterpreter
-
-# TODO test alternate approach for extrating text with .highlevel module
-# from pdfminer.high_level import extract_text
+import pypdf
+from pdfminder.pdfparser import PDFParser
+from pdfminder.pdfdocument import PDFDocument
 
 from typing import Optional
 from io import StringIO
 
 # for extracting tables
-import tabula
-import camelot
+# import tabula
+# import camelot
 
 
 from typing import Dict, List, Type, Optional, Union
 from pydantic import BaseModel, Json
+
+TEST_PDF_PATH = "../tests/test_data/testPaper1.pdf"
 
 
 class PDFExtractor(BaseModel):
@@ -53,35 +50,24 @@ class PDFExtractor(BaseModel):
         Returns:
         str: Extracted plain text.
         """
-        # TODO experiment with different papers for complete text extraction.
-        # alternate for extracting
-        # with open('report.pdf', 'rb') as f:
-        #     text = extract_text(f)
-        # return text
 
-        rsrcmgr = PDFResourceManager()
-        retstr = StringIO()
-        codec = 'utf-8'
-        laparams = LAParams()
-        device = TextConverter(rsrcmgr, retstr, codec=codec, laparams=laparams)
-        fp = open(pdf_path, 'rb')
-        interpreter = PDFPageInterpreter(rsrcmgr, device)
-        password = ""
-        maxpages = 0
-        caching = True
-        pagenos = set()
+        with open(pdf_path, "rb") as fp:
+            pdf = pypdf.PdfReader(fp)
+            num_pages = len(pdf.pages)
+            objs = {}
 
-        for page in PDFPage.get_pages(fp, pagenos, maxpages=maxpages, password=password, caching=caching, check_extractable=True):
-            interpreter.process_page(page)
+            for page in range(num_pages):
+                # Extract the text from the page
+                page_text = pdf.pages[page].extract_text()
+                page_label = pdf.page_labels[page]
 
-        text = retstr.getvalue()
+                metadata = {"page_label": page_label, "file_name": fp.name}
 
-        fp.close()
-        device.close()
-        retstr.close()
-        return text
+                objs[page] = {"text": page_text, "metadata": metadata}
 
-    def extract_metadata(self, pdf_path: str) -> Dict:
+            return objs
+
+    def extract_pdf_metadata(self, pdf_file: str) -> Dict:
         """
         Extracts metadata and structured text (e.g., sections, titles) from the PDF.
 
@@ -91,8 +77,19 @@ class PDFExtractor(BaseModel):
         Returns:
         Dict: Extracted metadata and structured text information.
         """
+        with open(pdf_file, 'rb') as file:
+            parser = PDFParser(file)
+            doc = PDFDocument(parser)
+            # stored in the 'info' attribute of the PDFDocument object.
+            metadata = doc.info
 
-        return {"metadata": "Extracted metadata"}
+            if metadata:
+                # 'metadata' is a list of dictionaries. Usually only one dictionary in the list.
+                metadata_dict = {key.decode('utf8'): value.decode(
+                    'utf8') for key, value in metadata[0].items()}
+                return metadata_dict
+            else:
+                return "No metadata found."
 
     def extract_tables(self, pdf_path: str) -> List[Dict]:
         """
@@ -122,3 +119,7 @@ class PDFExtractor(BaseModel):
         # TODO format the extracted information into a predefined JSON structure
 
         return {"Some": "JSON"}
+
+
+extractor = PDFExtractor()
+extractor.extract_text(TEST_PDF_PATH)
