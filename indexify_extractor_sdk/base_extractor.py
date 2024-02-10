@@ -4,11 +4,13 @@ import json
 from importlib import import_module
 from typing import get_type_hints
 
-from pydantic import BaseModel,Json
+from pydantic import BaseModel, Json
+
 
 class EmbeddingSchema(BaseModel):
     dim: int
     distance: str
+
 
 class Embedding(BaseModel):
     values: List[float]
@@ -43,6 +45,7 @@ class Feature(BaseModel):
     def metadata(cls, value: Json, name: str = "metadata"):
         return cls(feature_type="metadata", name=name, value=json.dumps(value))
 
+
 class Content(BaseModel):
     content_type: Optional[str]
     data: bytes
@@ -76,7 +79,8 @@ class Extractor(ABC):
 
     system_dependencies: List[str] = []
 
-    python_dependencies: List[str] = []
+    python_dependencies: List[str] = [
+        "timm", "pyarrow", "transformers", "PyMuPDF", "pydantic", "torch", "pdfplumber", "pillow"]
 
     description: str = ""
 
@@ -84,7 +88,7 @@ class Extractor(ABC):
 
     @abstractmethod
     def extract(
-        self, content: Content, params: Type[BaseModel] = None) -> List[Content]:
+            self, content: Content, params: Type[BaseModel] = None) -> List[Content]:
         """
         Extracts information from the content.
         """
@@ -108,12 +112,14 @@ class ExtractorWrapper:
     def extract(self, content: List[Content], params:  Json) -> List[List[Content]]:
         params = "{}" if params is None else params
         params_dict = json.loads(params)
-        param_instance = self._param_cls.model_validate(params_dict) if self._param_cls else None
+        param_instance = self._param_cls.model_validate(
+            params_dict) if self._param_cls else None
 
         out = []
         for c in content:
             extracted_data = self._instance.extract(
-                Content(content_type=c.content_type, data=bytes(c.data)), param_instance
+                Content(content_type=c.content_type,
+                        data=bytes(c.data)), param_instance
             )
             out.append(extracted_data)
         return out
@@ -131,7 +137,8 @@ class ExtractorWrapper:
         for content in out_c:
             for feature in content.features:
                 if feature.feature_type == "embedding":
-                    embedding_value: Embedding = Embedding.parse_raw(feature.value)
+                    embedding_value: Embedding = Embedding.parse_raw(
+                        feature.value)
                     embedding_schema = EmbeddingSchema(
                         dim=len(embedding_value.values),
                         distance=embedding_value.distance,

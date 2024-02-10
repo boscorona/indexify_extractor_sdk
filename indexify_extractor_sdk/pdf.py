@@ -12,7 +12,7 @@ import fitz  # PyMuPDF
 from transformers import AutoImageProcessor, TableTransformerForObjectDetection
 
 
-TEST_PDF_PATH = "./tests/test_data/testPaper.pdf"
+TEST_PDF_PATH = "./tests/test_data/testPaper3.pdf"
 
 
 class PDFLoader(BaseModel):
@@ -36,14 +36,33 @@ class PDFLoader(BaseModel):
         Returns:
             List[Dict]: Text extracted from each page along with page numbers.
         """
-        doc = fitz.open(self.pdf_path)
-        pages_text = []
+
+        doc = fitz.open(TEST_PDF_PATH)
+        data = {}
+
         for page_num in range(len(doc)):
             page = doc.load_page(page_num)
-            text = page.get_text()
-            pages_text.append({"page": page_num + 1, "text": text})
+            blocks = page.get_text("dict")["blocks"]
+            page_data = []
+
+            for block in blocks:
+                if "lines" in block:  # Ensure it's a text block
+                    paragraph_text = ""
+                    bbox = block["bbox"]
+                    for line in block["lines"]:
+                        for span in line["spans"]:
+                            # Aggregate text
+                            paragraph_text += span["text"] + " "
+                    paragraph_text = paragraph_text.strip()
+                    page_data.append(
+                        {"text": paragraph_text, "bbox": list(bbox)})
+
+            data[f"Page_{page_num + 1}"] = page_data
+
         doc.close()
-        return pages_text
+        print(data)
+
+        return data
 
     def extract_metadata(self) -> Dict:
         """
@@ -55,6 +74,7 @@ class PDFLoader(BaseModel):
         doc = fitz.open(self.pdf_path)
         metadata = doc.metadata
         doc.close()
+
         return metadata
 
     def extract_tables(self) -> List[Dict]:
@@ -108,28 +128,28 @@ class PDFLoader(BaseModel):
                 image_stream = io.BytesIO(image_data)
                 image = Image.open(image_stream).convert("RGB")
 
-        image_processor = AutoImageProcessor.from_pretrained(
-            "microsoft/table-transformer-detection")
-        model = TableTransformerForObjectDetection.from_pretrained(
-            "microsoft/table-transformer-detection")
+                image_processor = AutoImageProcessor.from_pretrained(
+                    "microsoft/table-transformer-detection")
+                model = TableTransformerForObjectDetection.from_pretrained(
+                    "microsoft/table-transformer-detection")
 
-        inputs = image_processor(images=image, return_tensors="pt")
-        outputs = model(**inputs)
+                inputs = image_processor(images=image, return_tensors="pt")
+                outputs = model(**inputs)
 
-        # convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
-        target_sizes = torch.tensor([image.size[::-1]])
-        results = image_processor.post_process_object_detection(outputs, threshold=0.9, target_sizes=target_sizes)[
-            0
-        ]
+                # convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
+                target_sizes = torch.tensor([image.size[::-1]])
+                results = image_processor.post_process_object_detection(outputs, threshold=0.9, target_sizes=target_sizes)[
+                    0
+                ]
 
-        tableBBox = {}
+                tableBBox = {}
 
-        for label, box in zip(results["labels"], results["boxes"]):
-            box = [round(i, 2) for i in box.tolist()]
-            tableBBox[model.config.id2label[label.item()]] = box
+                for label, box in zip(results["labels"], results["boxes"]):
+                    box = [round(i, 2) for i in box.tolist()]
+                    tableBBox[model.config.id2label[label.item()]] = box
 
-        tables_extract["tables"] = all_tables
-        tables_extract["bounding_boxes"] = tableBBox
+                tables_extract["tables"] = all_tables
+                tables_extract["bounding_boxes"] = tableBBox
 
         return tables_extract
 
