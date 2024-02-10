@@ -5,7 +5,7 @@ from PIL import Image
 import pandas as pd
 import pdfplumber
 import torch
-from pydantic import BaseModel, Field
+from pydantic import Field
 from typing import Optional, List, Dict
 import fitz  # PyMuPDF
 
@@ -15,7 +15,7 @@ from transformers import AutoImageProcessor, TableTransformerForObjectDetection
 TEST_PDF_PATH = "./tests/test_data/testPaper3.pdf"
 
 
-class PDFLoader(BaseModel):
+class PDFLoader():
     """
     Load and extract information from PDF files, specifically research papers.
 
@@ -25,9 +25,8 @@ class PDFLoader(BaseModel):
     This extractor is primarily designed to extract information from PDF files, namely research papers.
     """
 
-    chunk_size: Optional[int] = 1000
-    pdf_path: str = Field(...,
-                          description="Path to the PDF file to be processed.")
+    def __init__(self, pdf_path: str):
+        self.pdf_path = pdf_path
 
     def extract_text_pymupdf(self) -> List[Dict]:
         """
@@ -37,7 +36,7 @@ class PDFLoader(BaseModel):
             List[Dict]: Text extracted from each page along with page numbers.
         """
 
-        doc = fitz.open(TEST_PDF_PATH)
+        doc = fitz.open(self.pdf_path)
         data = {}
 
         for page_num in range(len(doc)):
@@ -46,7 +45,7 @@ class PDFLoader(BaseModel):
             page_data = []
 
             for block in blocks:
-                if "lines" in block:  # Ensure it's a text block
+                if "lines" in block:  # ensure text block
                     paragraph_text = ""
                     bbox = block["bbox"]
                     for line in block["lines"]:
